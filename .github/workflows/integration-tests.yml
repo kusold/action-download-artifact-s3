@@ -1,0 +1,328 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test-garage:
+    name: Test with Garage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout artifact-s3 library
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/artifact-s3
+          path: artifact-s3
+
+      - name: Checkout upload action
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/action-upload-artifact-s3
+          path: action-upload-artifact-s3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install library dependencies
+        run: npm ci
+        working-directory: artifact-s3
+
+      - name: Build library
+        run: npm run build
+        working-directory: artifact-s3
+
+      - name: Install upload action dependencies
+        run: npm ci
+        working-directory: action-upload-artifact-s3
+
+      - name: Build upload action
+        run: npm run build
+        working-directory: action-upload-artifact-s3
+
+      - name: Install download action dependencies
+        run: npm ci
+
+      - name: Build download action
+        run: npm run build
+
+      - name: Start Garage server
+        run: |
+          mkdir -p /tmp/garage/meta /tmp/garage/data
+          
+          cat > /tmp/garage/garage.toml <<EOF
+          metadata_dir = "/var/lib/garage/meta"
+          data_dir = "/var/lib/garage/data"
+          db_engine = "sqlite"
+          
+          replication_factor = 1
+          
+          rpc_bind_addr = "[::]:3901"
+          rpc_public_addr = "127.0.0.1:3901"
+          rpc_secret = "$(openssl rand -hex 32)"
+          
+          [s3_api]
+          s3_region = "garage"
+          api_bind_addr = "[::]:3900"
+          root_domain = ".s3.garage.localhost"
+          
+          [s3_web]
+          bind_addr = "[::]:3902"
+          root_domain = ".web.garage.localhost"
+          index = "index.html"
+          
+          [admin]
+          api_bind_addr = "[::]:3903"
+          admin_token = "admin123"
+          metrics_token = "metrics123"
+          EOF
+          
+          docker run -d \
+            --name garage \
+            -p 3900:3900 -p 3901:3901 -p 3902:3902 -p 3903:3903 \
+            -v /tmp/garage/garage.toml:/etc/garage.toml \
+            -v /tmp/garage/meta:/var/lib/garage/meta \
+            -v /tmp/garage/data:/var/lib/garage/data \
+            dxflrs/garage:v2.1.0
+          
+          sleep 5
+          
+          NODE_ID=$(docker exec garage /garage status 2>/dev/null | grep -oP '^[a-f0-9]+' | head -1)
+          echo "Node ID: $NODE_ID"
+          
+          docker exec garage /garage layout assign -z dc1 -c 1G "$NODE_ID"
+          docker exec garage /garage layout apply --version 1
+          
+          docker exec garage /garage bucket create test-artifacts
+          docker exec garage /garage key create test-key
+          
+          KEY_INFO=$(docker exec garage /garage key info test-key)
+          echo "$KEY_INFO"
+          
+          ACCESS_KEY=$(echo "$KEY_INFO" | grep "Key ID:" | awk '{print $3}')
+          SECRET_KEY=$(echo "$KEY_INFO" | grep "Secret key:" | awk '{print $3}')
+          
+          echo "ACCESS_KEY=$ACCESS_KEY" >> $GITHUB_ENV
+          echo "SECRET_KEY=$SECRET_KEY" >> $GITHUB_ENV
+          
+          docker exec garage /garage bucket allow \
+            --read \
+            --write \
+            --owner \
+            test-artifacts \
+            --key test-key
+          
+          echo "Garage setup complete!"
+
+      - name: Create test files
+        run: |
+          mkdir -p test-upload
+          echo "Hello, World!" > test-upload/hello.txt
+          echo "Test file 2" > test-upload/test.txt
+          mkdir -p test-upload/subdir
+          echo "Nested file" > test-upload/subdir/nested.txt
+
+      - name: Upload test artifact
+        uses: ./action-upload-artifact-s3
+        with:
+          name: test-artifact
+          path: test-upload/
+          s3-bucket: test-artifacts
+          s3-endpoint: http://localhost:3900
+          s3-region: garage
+          s3-force-path-style: 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ env.ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.SECRET_KEY }}
+
+      - name: Test Download Action
+        uses: ./
+        with:
+          name: test-artifact
+          path: test-download
+          s3-bucket: test-artifacts
+          s3-endpoint: http://localhost:3900
+          s3-region: garage
+          s3-force-path-style: 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ env.ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.SECRET_KEY }}
+
+      - name: Verify downloaded files
+        run: |
+          echo "Downloaded files:"
+          find test-download -type f
+          
+          echo ""
+          echo "Comparing content..."
+          diff test-upload/hello.txt test-download/hello.txt
+          diff test-upload/test.txt test-download/test.txt
+          diff test-upload/subdir/nested.txt test-download/subdir/nested.txt
+          
+          echo "All files match!"
+
+      - name: Upload second artifact for pattern test
+        run: |
+          mkdir -p test-upload-2
+          echo "Second artifact" > test-upload-2/second.txt
+
+      - name: Upload second artifact
+        uses: ./action-upload-artifact-s3
+        with:
+          name: test-artifact-2
+          path: test-upload-2/
+          s3-bucket: test-artifacts
+          s3-endpoint: http://localhost:3900
+          s3-region: garage
+          s3-force-path-style: 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ env.ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.SECRET_KEY }}
+
+      - name: Download with pattern
+        uses: ./
+        with:
+          pattern: 'test-artifact*'
+          path: test-download-pattern
+          s3-bucket: test-artifacts
+          s3-endpoint: http://localhost:3900
+          s3-region: garage
+          s3-force-path-style: 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ env.ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.SECRET_KEY }}
+
+      - name: Verify pattern download
+        run: |
+          echo "Pattern downloaded files:"
+          find test-download-pattern -type f
+          
+          test -f test-download-pattern/test-artifact/hello.txt
+          test -f test-download-pattern/test-artifact-2/second.txt
+          
+          echo "Pattern download successful!"
+
+      - name: Test merge-multiple
+        uses: ./
+        with:
+          pattern: 'test-artifact*'
+          path: test-download-merged
+          merge-multiple: 'true'
+          s3-bucket: test-artifacts
+          s3-endpoint: http://localhost:3900
+          s3-region: garage
+          s3-force-path-style: 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ env.ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.SECRET_KEY }}
+
+      - name: Verify merged download
+        run: |
+          echo "Merged downloaded files:"
+          find test-download-merged -type f
+          
+          # Files should be in root, not in subdirectories
+          test -f test-download-merged/hello.txt
+          test -f test-download-merged/second.txt
+          
+          echo "Merge-multiple download successful!"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop garage || true
+          docker rm garage || true
+
+  test-aws-s3:
+    name: Test with AWS S3
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: aws-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout artifact-s3 library
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/artifact-s3
+          path: artifact-s3
+
+      - name: Checkout upload action
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/action-upload-artifact-s3
+          path: action-upload-artifact-s3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install library dependencies
+        run: npm ci
+        working-directory: artifact-s3
+
+      - name: Build library
+        run: npm run build
+        working-directory: artifact-s3
+
+      - name: Install upload action dependencies
+        run: npm ci
+        working-directory: action-upload-artifact-s3
+
+      - name: Build upload action
+        run: npm run build
+        working-directory: action-upload-artifact-s3
+
+      - name: Install download action dependencies
+        run: npm ci
+
+      - name: Build download action
+        run: npm run build
+
+      - name: Create test files
+        run: |
+          mkdir -p test-upload
+          echo "Hello from AWS S3 test!" > test-upload/hello.txt
+          dd if=/dev/urandom of=test-upload/large-file.bin bs=1M count=10
+
+      - name: Upload test artifact
+        uses: ./action-upload-artifact-s3
+        with:
+          name: download-test-${{ github.run_id }}
+          path: test-upload/
+          s3-bucket: ${{ secrets.AWS_S3_BUCKET }}
+          s3-region: ${{ secrets.AWS_REGION }}
+          s3-prefix: ci-tests
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Test Download from AWS S3
+        uses: ./
+        with:
+          name: download-test-${{ github.run_id }}
+          path: test-download
+          s3-bucket: ${{ secrets.AWS_S3_BUCKET }}
+          s3-region: ${{ secrets.AWS_REGION }}
+          s3-prefix: ci-tests
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Verify downloaded files
+        run: |
+          diff test-upload/hello.txt test-download/hello.txt
+          diff test-upload/large-file.bin test-download/large-file.bin
+          echo "AWS S3 test passed!"

@@ -1,0 +1,55 @@
+name: 'Download Artifact from S3'
+description: 'Download a build artifact from S3 that was previously uploaded in the workflow by the upload-artifact-s3 action'
+author: ''
+inputs:
+  name:
+    description: 'Name of the artifact to download. If unspecified, all artifacts for the run are downloaded.'
+    required: false
+  path:
+    description: 'Destination path. Supports basic tilde expansion. Defaults to $GITHUB_WORKSPACE'
+    required: false
+  pattern:
+    description: 'A glob pattern matching the artifacts that should be downloaded. Ignored if name is specified.'
+    required: false
+  merge-multiple:
+    description: >
+      When multiple artifacts are matched, this changes the behavior of the destination directories.
+      If true, the downloaded artifacts will be in the same directory specified by path.
+      If false, the downloaded artifacts will be extracted into individual named directories within the specified path.
+    required: false
+    default: 'false'
+  repository:
+    description: >
+      The repository owner and the repository name joined together by "/".
+      This is the repository that artifacts will be downloaded from.
+    required: false
+    default: ${{ github.repository }}
+  run-id:
+    description: >
+      The id of the workflow run where the desired download artifact was uploaded from.
+    required: false
+    default: ${{ github.run_id }}
+  # S3-specific inputs
+  s3-bucket:
+    description: 'S3 bucket name for storing artifacts'
+    required: true
+  s3-prefix:
+    description: 'Optional prefix path within the bucket (e.g., "artifacts/")'
+    required: false
+  s3-endpoint:
+    description: 'S3-compatible endpoint URL (for MinIO, Cloudflare R2, etc.)'
+    required: false
+  s3-region:
+    description: 'AWS region for the S3 bucket'
+    default: 'us-east-1'
+  s3-force-path-style:
+    description: 'Force path-style URLs (required for some S3-compatible stores)'
+    default: 'false'
+
+outputs:
+  download-path:
+    description: 'Path of artifact download'
+
+runs:
+  using: 'node24'
+  main: 'dist/index.js'
