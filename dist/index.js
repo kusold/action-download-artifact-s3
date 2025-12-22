@@ -23345,12 +23345,18 @@ class S3ClientWrapper {
     constructor(config) {
         this.bucket = config.bucket;
         this.prefix = config.prefix?.replace(/\/+$/, '') ?? '';
-        this.client = new client_s3_1.S3Client({
+        // Only include credentials in config if explicitly provided
+        // Otherwise, let the SDK use its default credential provider chain
+        // (environment variables, shared credentials file, etc.)
+        const clientConfig = {
             region: config.region ?? 'us-east-1',
             endpoint: config.endpoint,
             forcePathStyle: config.forcePathStyle ?? !!config.endpoint,
-            credentials: config.credentials,
-        });
+        };
+        if (config.credentials) {
+            clientConfig.credentials = config.credentials;
+        }
+        this.client = new client_s3_1.S3Client(clientConfig);
     }
     /**
      * Build the full S3 key for a given path
