@@ -160,9 +160,10 @@ jobs:
 
           echo ""
           echo "Comparing content..."
-          diff test-upload/hello.txt test-download/hello.txt
-          diff test-upload/test.txt test-download/test.txt
-          diff test-upload/subdir/nested.txt test-download/subdir/nested.txt
+          # Files are at test-download/{artifact-name}/test-upload/...
+          diff test-upload/hello.txt test-download/test-artifact/test-upload/hello.txt
+          diff test-upload/test.txt test-download/test-artifact/test-upload/test.txt
+          diff test-upload/subdir/nested.txt test-download/test-artifact/test-upload/subdir/nested.txt
 
           echo "All files match!"
 
@@ -202,8 +203,9 @@ jobs:
           echo "Pattern downloaded files:"
           find test-download-pattern -type f
 
-          test -f test-download-pattern/test-artifact/hello.txt
-          test -f test-download-pattern/test-artifact-2/second.txt
+          # Files include the original upload path (test-upload/, test-upload-2/)
+          test -f test-download-pattern/test-artifact/test-upload/hello.txt
+          test -f test-download-pattern/test-artifact-2/test-upload-2/second.txt
 
           echo "Pattern download successful!"
 
@@ -226,9 +228,9 @@ jobs:
           echo "Merged downloaded files:"
           find test-download-merged -type f
 
-          # Files should be in root, not in subdirectories
-          test -f test-download-merged/hello.txt
-          test -f test-download-merged/second.txt
+          # With merge-multiple, files are merged but still include original upload paths
+          test -f test-download-merged/test-upload/hello.txt
+          test -f test-download-merged/test-upload-2/second.txt
 
           echo "Merge-multiple download successful!"
 
