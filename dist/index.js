@@ -21256,13 +21256,18 @@ class ArtifactDownloader {
             await fs.promises.mkdir(path.dirname(destFilePath), { recursive: true });
             core.debug(`Downloading: ${relativePath}`);
             // Download the file
-            const { body, metadata } = await this.s3.downloadFile(file.key);
+            const { body, contentType, metadata } = await this.s3.downloadFile(file.key);
             core.debug(`File metadata for ${relativePath}: ${JSON.stringify(metadata)}`);
+            core.debug(`File content type for ${relativePath}: ${contentType}`);
             // Check if file is compressed
-            // Note: S3 metadata keys are case-insensitive and may be returned in different cases
-            // by different S3-compatible implementations
-            const isCompressed = this.getMetadataValue(metadata, 'compressed') === 'true';
-            core.debug(`isCompressed: ${isCompressed}`);
+            // We check multiple indicators since different S3-compatible implementations
+            // may handle metadata differently:
+            // 1. Custom metadata 'compressed' flag (set during upload)
+            // 2. Content-Type being 'application/gzip' (also set during upload)
+            const compressedMetadata = this.getMetadataValue(metadata, 'compressed') === 'true';
+            const gzipContentType = contentType === 'application/gzip';
+            const isCompressed = compressedMetadata || gzipContentType;
+            core.debug(`isCompressed: ${isCompressed} (metadata: ${compressedMetadata}, contentType: ${gzipContentType})`);
             if (isCompressed) {
                 // Decompress and write
                 const gunzip = zlib.createGunzip();
@@ -21459,6 +21464,7 @@ class S3ClientWrapper {
         return {
             body: result.Body,
             contentLength: result.ContentLength ?? 0,
+            contentType: result.ContentType,
             metadata: result.Metadata,
         };
     }
