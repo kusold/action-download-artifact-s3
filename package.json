@@ -4,7 +4,7 @@
   "description": "GitHub Action to download artifacts from S3",
   "main": "dist/index.js",
   "scripts": {
-    "build": "ncc build src/index.ts -o dist --source-map --license licenses.txt",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=cjs --target=node20 --outfile=dist/index.js",
     "clean": "rm -rf dist",
     "lint": "eslint src/**/*.ts",
     "test": "vitest"
@@ -19,12 +19,12 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@actions/core": "^1.11.1",
+    "@actions/core": "^3.0.1",
     "@kusold/artifact-s3": "github:kusold/artifact-s3#1803416d53b3fcc6d3425c96affa362f66cfc3f2"
   },
   "devDependencies": {
     "@types/node": "^26.1.0",
-    "@vercel/ncc": "^0.44.1",
+    "esbuild": "^0.25.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
   }
