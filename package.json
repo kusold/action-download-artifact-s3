@@ -23,9 +23,9 @@
     "@kusold/artifact-s3": "github:kusold/artifact-s3#1803416d53b3fcc6d3425c96affa362f66cfc3f2"
   },
   "devDependencies": {
-    "@types/node": "^26.1.0",
-    "esbuild": "^0.25.0",
-    "typescript": "^6.0.3",
+    "@types/node": "^26.2.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   }
 }
