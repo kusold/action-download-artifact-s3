@@ -92,3 +92,6 @@ async function run(): Promise<void> {
 }
 
 run();
+
+// ci test marker: dist regeneration (safe to revert)
+core.debug("ci dist regen test marker");
