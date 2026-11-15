@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -16,6 +17,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # On PRs, check out the head branch (not the merge commit) so a
+          # rebuilt dist/ can be pushed straight back to the PR branch.
+          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -39,13 +44,37 @@ jobs:
             git push
           fi
 
-      - name: Check for uncommitted dist changes (PR only)
+      - name: Rebuild and push dist (PR only)
         if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          if [[ -n "$(git status --porcelain dist/)" ]]; then
-            echo "::error::Uncommitted changes in dist/. The dist will be rebuilt when merged to main."
+          if [[ -z "$(git status --porcelain dist/)" ]]; then
+            echo "dist/ is up to date with src/."
+            exit 0
+          fi
+          if [[ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]]; then
+            echo "::error::dist/ is out of date and this is a fork PR, so CI cannot push the rebuild. Run 'npm run build' locally and commit dist/."
             git status --porcelain dist/
             exit 1
+          fi
+          echo "dist/ is stale; committing the rebuild and pushing to ${HEAD_REF}."
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add dist/
+          git commit -m "chore: rebuild dist"
+          if ! git push origin "HEAD:${HEAD_REF}"; then
+            echo "::error::Failed to push rebuilt dist to ${HEAD_REF}."
+            exit 1
+          fi
+          # A GITHUB_TOKEN push fires no push/pull_request events, so re-run CI
+          # on the new head commit explicitly. workflow_dispatch is one of the
+          # two events GITHUB_TOKEN can still trigger.
+          if gh workflow run ci.yml --ref "${HEAD_REF}"; then
+            echo "::notice::Rebuilt dist pushed and CI re-triggered on the new commit."
+          else
+            echo "::warning::Rebuilt dist pushed, but CI could not be re-triggered automatically. Re-run the workflow on ${HEAD_REF} manually."
           fi
 
   lint:
