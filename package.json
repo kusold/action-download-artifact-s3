@@ -4,7 +4,7 @@
   "description": "GitHub Action to download artifacts from S3",
   "main": "dist/index.js",
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=node --format=cjs --target=node20 --outfile=dist/index.js",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=cjs --target=node20 --conditions=import --outfile=dist/index.js",
     "clean": "rm -rf dist",
     "lint": "eslint src/**/*.ts",
     "test": "vitest"
