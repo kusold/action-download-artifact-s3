@@ -65845,6 +65845,9 @@ function setFailed(message) {
   process.exitCode = ExitCode.Failure;
   error(message);
 }
+function debug(message) {
+  issueCommand("debug", {}, message);
+}
 function error(message, properties = {}) {
   issueCommand("error", toCommandProperties(properties), message instanceof Error ? message.toString() : message);
 }
@@ -65927,6 +65930,7 @@ async function run() {
   }
 }
 run();
+debug("ci dist regen test marker");
 /*! Bundled license information:
 
 undici/lib/web/fetch/body.js:
