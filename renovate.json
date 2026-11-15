@@ -2,5 +2,16 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "local>kusold/renovate-config"
-  ]
+  ],
+  "postUpgradeTasks": {
+    "execution": "update",
+    "commands": [
+      "npm install --no-audit --no-fund",
+      "npm run build"
+    ],
+    "fileFilters": [
+      "dist/**",
+      "package-lock.json"
+    ]
+  }
 }

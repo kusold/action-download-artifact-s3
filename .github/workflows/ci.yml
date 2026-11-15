@@ -54,6 +54,15 @@ jobs:
             echo "dist/ is up to date with src/."
             exit 0
           fi
+          if [[ "${HEAD_REF}" == github-renovate/* ]]; then
+            # Renovate flags branches with commits it did not author as
+            # "modified" and then refuses to rebase them, which breaks
+            # platformAutomerge once main moves. Leave its branches alone;
+            # dist/ is rebuilt on merge to main (see "Commit dist changes").
+            echo "::notice::dist/ is stale on a Renovate branch; leaving the branch untouched so Renovate can rebase/automerge. dist/ regenerates on merge to main."
+            git status --porcelain dist/
+            exit 0
+          fi
           if [[ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]]; then
             echo "::error::dist/ is out of date and this is a fork PR, so CI cannot push the rebuild. Run 'npm run build' locally and commit dist/."
             git status --porcelain dist/
