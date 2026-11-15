@@ -4,7 +4,7 @@
   "description": "GitHub Action to download artifacts from S3",
   "main": "dist/index.js",
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=node --format=cjs --target=node20 --outfile=dist/index.js",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=cjs --target=node20 --conditions=import --outfile=dist/index.js",
     "clean": "rm -rf dist",
     "lint": "eslint src/**/*.ts",
     "test": "vitest"
@@ -20,7 +20,7 @@
   "license": "MIT",
   "dependencies": {
     "@actions/core": "^3.0.1",
-    "@kusold/artifact-s3": "github:kusold/artifact-s3#1803416d53b3fcc6d3425c96affa362f66cfc3f2"
+    "@kusold/artifact-s3": "github:kusold/artifact-s3#40e97e6dce062728374c8b792f6ee4a96a4c0e35"
   },
   "devDependencies": {
     "@types/node": "^26.1.0",
