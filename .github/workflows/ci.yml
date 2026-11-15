@@ -63,18 +63,24 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add dist/
-          git commit -m "chore: rebuild dist"
+          # [skip ci] keeps the GITHUB_TOKEN push from spawning synchronize
+          # runs that sit in "action required" awaiting approval.
+          git commit -m "chore: rebuild dist [skip ci]"
           if ! git push origin "HEAD:${HEAD_REF}"; then
             echo "::error::Failed to push rebuilt dist to ${HEAD_REF}."
             exit 1
           fi
-          # A GITHUB_TOKEN push fires no push/pull_request events, so re-run CI
-          # on the new head commit explicitly. workflow_dispatch is one of the
-          # two events GITHUB_TOKEN can still trigger.
-          if gh workflow run ci.yml --ref "${HEAD_REF}"; then
-            echo "::notice::Rebuilt dist pushed and CI re-triggered on the new commit."
+          # A GITHUB_TOKEN push fires no push/pull_request events, so re-run
+          # the PR workflows on the new head commit explicitly.
+          # workflow_dispatch is one of the two events GITHUB_TOKEN can still
+          # trigger. Skip markers do not suppress dispatched runs.
+          ok=0
+          gh workflow run ci.yml --ref "${HEAD_REF}" && ok=1
+          gh workflow run integration-tests.yml --ref "${HEAD_REF}" && ok=1
+          if [[ "${ok}" == "1" ]]; then
+            echo "::notice::Rebuilt dist pushed and workflows re-triggered on the new commit."
           else
-            echo "::warning::Rebuilt dist pushed, but CI could not be re-triggered automatically. Re-run the workflow on ${HEAD_REF} manually."
+            echo "::warning::Rebuilt dist pushed, but workflows could not be re-triggered automatically (workflow_dispatch may not be on the default branch yet). Re-run them on ${HEAD_REF} manually."
           fi
 
   lint:
