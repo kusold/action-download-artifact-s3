@@ -3,6 +3,9 @@
   "extends": [
     "local>kusold/renovate-config"
   ],
+  "gitIgnoredAuthors": [
+    "github-actions[bot]@users.noreply.github.com"
+  ],
   "postUpgradeTasks": {
     "execution": "update",
     "commands": [
