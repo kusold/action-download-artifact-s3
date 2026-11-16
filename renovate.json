@@ -7,7 +7,7 @@
     "github-actions[bot]@users.noreply.github.com"
   ],
   "postUpgradeTasks": {
-    "execution": "update",
+    "executionMode": "update",
     "commands": [
       "npm install --no-audit --no-fund",
       "npm run build"
